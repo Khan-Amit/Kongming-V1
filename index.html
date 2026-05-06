@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Kongming Wallet · Unhackable</title>
+    <title>Kongming Wallet · Real Email OTP</title>
     <style>
         body {
             background: #0a0f1e;
@@ -23,7 +23,7 @@
             padding: 24px;
             border: 1px solid #2d3a5e;
         }
-        h1 { text-align: center; color: white; }
+        h1 { text-align: center; color: white; margin: 0 0 8px; }
         input, button {
             width: 100%;
             padding: 14px;
@@ -38,18 +38,19 @@
         .status { color: #88aaff; text-align: center; margin-top: 12px; }
         .footer { font-size: 0.65rem; text-align: center; color: #5b6b8e; margin-top: 20px; }
     </style>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
 
 <!-- REGISTRATION SCREEN -->
 <div class="card" id="registerDiv">
     <h1>🔐 Kongming Wallet</h1>
-    <input type="tel" id="regPhone" placeholder="Phone Number" value="">
-    <button id="sendOtpBtn">Send OTP</button>
+    <input type="email" id="regEmail" placeholder="Email Address" value="">
+    <button id="sendOtpBtn">Send OTP via Email</button>
     <input type="text" id="regOtp" placeholder="Enter OTP" class="hidden">
     <button id="verifyOtpBtn" class="hidden">Verify & Request Approval</button>
     <div id="regStatus" class="status"></div>
-    <div class="footer">Device‑bound · Admin approved · CSFS secured</div>
+    <div class="footer">Real email OTP · Admin approved · CSFS secured</div>
 </div>
 
 <!-- PENDING APPROVAL SCREEN -->
@@ -61,11 +62,11 @@
     <div id="pendingStatus" class="status"></div>
 </div>
 
-<!-- MAIN WALLET (shown after admin approval) -->
+<!-- MAIN WALLET -->
 <div class="card hidden" id="walletDiv">
     <h1>⚡ Kongming</h1>
     <div style="text-align:center; margin:16px 0;">
-        <div style="font-size:2rem; color:#ffdd99;" id="balance">0.00</div>
+        <div style="font-size:2rem; color:#ffdd99;" id="balance">100.00</div>
         <div>CSFS Coins</div>
     </div>
     <div class="tabs" style="display:flex; gap:8px;">
@@ -73,83 +74,94 @@
         <button id="receiveTabBtn" style="flex:1;">📥 Receive</button>
     </div>
     <div id="sendPane">
-        <input type="text" id="recipientPhone" placeholder="Recipient Phone Number">
+        <input type="text" id="recipientEmail" placeholder="Recipient Email">
         <input type="number" id="amount" placeholder="Amount (CSFS)">
         <button id="sendBtn">Send</button>
     </div>
     <div id="receivePane" class="hidden">
         <div style="text-align:center; padding:16px;">
-            <div>Your Phone: <strong id="userPhoneDisplay"></strong></div>
+            <div>Your Email: <strong id="userEmailDisplay"></strong></div>
             <div>Your CSFS ID: <strong id="userIdDisplay"></strong></div>
             <button id="copyIdBtn">📋 Copy ID</button>
         </div>
     </div>
     <div id="walletStatus" class="status"></div>
-    <div class="footer">🔐 Device‑bound · CSFS secured · Admin approved</div>
+    <div class="footer">🔐 Email‑bound · CSFS secured · Admin approved</div>
 </div>
 
 <script>
-    // Storage keys
-    const STORAGE_PREFIX = 'kongming_';
-    let currentUser = null;
+    // ========== EMAILJS CONFIGURATION ==========
+    // ⚠️ REPLACE THESE THREE VALUES WITH YOUR OWN FROM EMAILJS ⚠️
+    const EMAILJS_PUBLIC_KEY = 'user_XXXXXXXXXXXXX';  // Your Public Key
+    const EMAILJS_SERVICE_ID = 'service_XXXXXXXX';    // Your Service ID
+    const EMAILJS_TEMPLATE_ID = 'template_XXXXXXXX';  // Your Template ID
 
-    // Helper: generate random OTP (simulated)
+    // Initialize EmailJS
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+
+    // Helper: generate random 6-digit OTP
     function generateOtp() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
-    // Request approval (stores pending request in localStorage + admin queue)
-    function requestApproval(phone, deviceId) {
-        const pendingKey = STORAGE_PREFIX + 'pending_' + phone;
-        const request = { phone, deviceId, timestamp: Date.now(), status: 'pending' };
-        localStorage.setItem(pendingKey, JSON.stringify(request));
-        // Also add to global admin queue (separate key)
+    // ========== STORAGE ==========
+    const STORAGE_PREFIX = 'kongming_';
+    let currentEmail = null;
+    let currentOtp = null;
+
+    function requestApproval(email) {
+        const request = { email, timestamp: Date.now(), status: 'pending' };
+        localStorage.setItem(STORAGE_PREFIX + 'pending_' + email, JSON.stringify(request));
         const adminQueue = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'admin_queue') || '[]');
         adminQueue.push(request);
         localStorage.setItem(STORAGE_PREFIX + 'admin_queue', JSON.stringify(adminQueue));
         return request;
     }
 
-    // Check if user is approved
-    function isApproved(phone) {
+    function isApproved(email) {
         const approved = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'approved_users') || '[]');
-        return approved.includes(phone);
+        return approved.includes(email);
     }
 
-    // Register workflow
-    let currentOtp = null;
-    let currentPhone = null;
-
-    document.getElementById('sendOtpBtn').addEventListener('click', () => {
-        const phone = document.getElementById('regPhone').value.trim();
-        if (!phone || phone.length < 5) { alert('Enter valid phone number'); return; }
-        currentPhone = phone;
+    // ========== SEND REAL EMAIL OTP ==========
+    document.getElementById('sendOtpBtn').addEventListener('click', async () => {
+        const email = document.getElementById('regEmail').value.trim();
+        if (!email || !email.includes('@')) { alert('Enter valid email address'); return; }
+        currentEmail = email;
         currentOtp = generateOtp();
-        alert(`OTP sent: ${currentOtp} (simulated)`);
-        document.getElementById('regOtp').classList.remove('hidden');
-        document.getElementById('verifyOtpBtn').classList.remove('hidden');
-        document.getElementById('regStatus').innerText = 'OTP sent. Enter code.';
+
+        // Send real email via EmailJS
+        try {
+            const templateParams = {
+                to_email: currentEmail,
+                otp: currentOtp
+            };
+            await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+            document.getElementById('regStatus').innerText = '✅ OTP sent to your email. Check spam folder.';
+            document.getElementById('regOtp').classList.remove('hidden');
+            document.getElementById('verifyOtpBtn').classList.remove('hidden');
+        } catch (error) {
+            console.error('Email send failed:', error);
+            document.getElementById('regStatus').innerText = '❌ Failed to send email. Check EmailJS configuration.';
+        }
     });
 
     document.getElementById('verifyOtpBtn').addEventListener('click', () => {
         const enteredOtp = document.getElementById('regOtp').value.trim();
         if (enteredOtp !== currentOtp) { alert('Invalid OTP'); return; }
-        // Generate device ID (simulated)
-        const deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36);
-        requestApproval(currentPhone, deviceId);
+        requestApproval(currentEmail);
         document.getElementById('registerDiv').classList.add('hidden');
         document.getElementById('pendingDiv').classList.remove('hidden');
         document.getElementById('pendingStatus').innerText = 'Request sent to admin.';
     });
 
     document.getElementById('checkApprovalBtn').addEventListener('click', () => {
-        if (!currentPhone) return;
-        if (isApproved(currentPhone)) {
+        if (!currentEmail) return;
+        if (isApproved(currentEmail)) {
             document.getElementById('pendingDiv').classList.add('hidden');
             document.getElementById('walletDiv').classList.remove('hidden');
-            // Load wallet data
-            const balance = localStorage.getItem(STORAGE_PREFIX + currentPhone + '_balance') || '100.00';
+            const balance = localStorage.getItem(STORAGE_PREFIX + currentEmail + '_balance') || '100.00';
             document.getElementById('balance').innerText = balance;
-            document.getElementById('userPhoneDisplay').innerText = currentPhone;
-            document.getElementById('userIdDisplay').innerText = 'kongming_' + currentPhone.substring(5);
+            document.getElementById('userEmailDisplay').innerText = currentEmail;
+            document.getElementById('userIdDisplay').innerText = 'kongming_' + currentEmail.split('@')[0];
             document.getElementById('walletStatus').innerText = '✅ Wallet active';
         } else {
             document.getElementById('pendingStatus').innerText = 'Still pending admin approval.';
@@ -170,18 +182,18 @@
         document.getElementById('receiveTabBtn').classList.add('active');
     });
 
-    // Send (simplified)
+    // Send CSFS
     document.getElementById('sendBtn').addEventListener('click', () => {
-        const recipient = document.getElementById('recipientPhone').value.trim();
+        const recipient = document.getElementById('recipientEmail').value.trim();
         const amount = parseFloat(document.getElementById('amount').value);
-        if (!recipient || isNaN(amount)) { alert('Enter recipient and amount'); return; }
+        if (!recipient || isNaN(amount)) { alert('Enter recipient email and amount'); return; }
         let balance = parseFloat(document.getElementById('balance').innerText);
         if (amount > balance) { alert('Insufficient balance'); return; }
         balance -= amount;
         document.getElementById('balance').innerText = balance.toFixed(2);
-        localStorage.setItem(STORAGE_PREFIX + currentPhone + '_balance', balance.toFixed(2));
-        document.getElementById('walletStatus').innerText = `✅ Sent ${amount} CSFS to ${recipient}`;
-        setTimeout(() => document.getElementById('walletStatus').innerText = '', 3000);
+        localStorage.setItem(STORAGE_PREFIX + currentEmail + '_balance', balance.toFixed(2));
+        document.getElementById('walletStatus').innerHTML = `✅ Sent ${amount} CSFS to ${recipient}`;
+        setTimeout(() => document.getElementById('walletStatus').innerHTML = '', 3000);
         document.getElementById('amount').value = '';
     });
 
