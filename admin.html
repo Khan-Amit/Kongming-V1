@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kongming Admin · Approve Users</title>
+    <style>
+        body { background: #0a0f1e; font-family: system-ui; padding: 20px; color: white; }
+        .card { max-width: 800px; margin: auto; background: #111827cc; border-radius: 48px; padding: 24px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2d3a5e; }
+        button { background: #3b6ea0; border: none; padding: 8px 16px; border-radius: 40px; color: white; cursor: pointer; }
+        .approved { color: #4caf50; }
+        .pending { color: #ffaa44; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>🔐 Kongming Admin</h1>
+    <p>Approve or deny new wallet requests.</p>
+    <div id="adminStatus"></div>
+    <table id="requestTable">
+        <thead><tr><th>Phone</th><th>Device ID</th><th>Timestamp</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+<script>
+    const STORAGE_PREFIX = 'kongming_';
+    function loadRequests() {
+        const queue = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'admin_queue') || '[]');
+        const tbody = document.querySelector('#requestTable tbody');
+        tbody.innerHTML = '';
+        queue.forEach(req => {
+            const row = tbody.insertRow();
+            row.insertCell(0).innerText = req.phone;
+            row.insertCell(1).innerText = req.deviceId.substring(0, 20) + '…';
+            row.insertCell(2).innerText = new Date(req.timestamp).toLocaleString();
+            const actionCell = row.insertCell(3);
+            const approveBtn = document.createElement('button');
+            approveBtn.innerText = 'Approve';
+            approveBtn.style.background = '#4caf50';
+            approveBtn.onclick = () => {
+                let approved = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'approved_users') || '[]');
+                if (!approved.includes(req.phone)) approved.push(req.phone);
+                localStorage.setItem(STORAGE_PREFIX + 'approved_users', JSON.stringify(approved));
+                // Remove from queue
+                const newQueue = queue.filter(r => r.phone !== req.phone);
+                localStorage.setItem(STORAGE_PREFIX + 'admin_queue', JSON.stringify(newQueue));
+                loadRequests();
+                document.getElementById('adminStatus').innerHTML = `✅ Approved ${req.phone}`;
+                setTimeout(() => document.getElementById('adminStatus').innerHTML = '', 3000);
+            };
+            actionCell.appendChild(approveBtn);
+        });
+    }
+    loadRequests();
+</script>
+</body>
+</html>
