@@ -1,4 +1,28 @@
-er: 1px solid #2d3a5e;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Kongming Wallet · Email OTP</title>
+    <style>
+        body {
+            background: #0a0f1e;
+            font-family: system-ui;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .card {
+            max-width: 550px;
+            width: 100%;
+            background: #111827cc;
+            backdrop-filter: blur(4px);
+            border-radius: 48px;
+            padding: 24px;
+            border: 1px solid #2d3a5e;
         }
         h1 { text-align: center; color: white; margin: 0 0 8px; }
         input, button {
@@ -13,34 +37,31 @@ er: 1px solid #2d3a5e;
         button { background: #3b6ea0; color: white; font-weight: bold; cursor: pointer; }
         .hidden { display: none; }
         .status { color: #88aaff; text-align: center; margin-top: 12px; font-size: 0.8rem; }
-        .error-status { color: #ffaa88; text-align: center; margin-top: 12px; font-size: 0.8rem; }
+        .otp-display { color: #ffdd99; font-size: 1.5rem; font-weight: bold; text-align: center; margin: 10px 0; }
         .footer { font-size: 0.65rem; text-align: center; color: #5b6b8e; margin-top: 20px; }
     </style>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
 
-<!-- REGISTRATION SCREEN -->
 <div class="card" id="registerDiv">
     <h1>🔐 Kongming Wallet</h1>
     <input type="email" id="regEmail" placeholder="Email Address" value="amit.khanna.1082@gmail.com">
     <button id="sendOtpBtn">Send OTP via Email</button>
+    <div id="otpDisplay" class="otp-display"></div>
     <input type="text" id="regOtp" placeholder="Enter OTP" class="hidden">
     <button id="verifyOtpBtn" class="hidden">Verify & Request Approval</button>
     <div id="regStatus" class="status"></div>
-    <div id="regError" class="error-status"></div>
-    <div class="footer">Real email OTP · Admin approved · CSFS secured</div>
+    <div class="footer">Real email OTP · Simulated fallback · Admin approved</div>
 </div>
 
-<!-- PENDING APPROVAL SCREEN -->
 <div class="card hidden" id="pendingDiv">
     <h1>⏳ Awaiting Approval</h1>
     <p>Your request has been sent to the administrator.</p>
-    <p>You will be notified when approved.</p>
     <button id="checkApprovalBtn">Check Status</button>
     <div id="pendingStatus" class="status"></div>
 </div>
 
-<!-- MAIN WALLET -->
 <div class="card hidden" id="walletDiv">
     <h1>⚡ Kongming</h1>
     <div style="text-align:center; margin:16px 0;">
@@ -68,37 +89,16 @@ er: 1px solid #2d3a5e;
 </div>
 
 <script>
-    // ========== EMAILJS CONFIGURATION - YOUR KEYS ==========
+    // ========== EMAILJS KEYS ==========
     const EMAILJS_PUBLIC_KEY = 'F-s97f3XCAHJWOR6x';
     const EMAILJS_SERVICE_ID = 'service_h3meht8';
     const EMAILJS_TEMPLATE_ID = 'template_zfb79n8';
 
-    let emailjsReady = false;
-
-    // Load EmailJS dynamically
-    function loadEmailJS() {
-        return new Promise((resolve, reject) => {
-            if (typeof emailjs !== 'undefined') {
-                emailjs.init(EMAILJS_PUBLIC_KEY);
-                emailjsReady = true;
-                resolve();
-                return;
-            }
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-            script.onload = () => {
-                emailjs.init(EMAILJS_PUBLIC_KEY);
-                emailjsReady = true;
-                resolve();
-            };
-            script.onerror = () => reject(new Error('Failed to load EmailJS library'));
-            document.head.appendChild(script);
-        });
-    }
+    // Initialize EmailJS
+    emailjs.init(EMAILJS_PUBLIC_KEY);
 
     function generateOtp() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
-    // ========== STORAGE ==========
     const STORAGE_PREFIX = 'kongming_';
     let currentEmail = null;
     let currentOtp = null;
@@ -109,7 +109,6 @@ er: 1px solid #2d3a5e;
         const adminQueue = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'admin_queue') || '[]');
         adminQueue.push(request);
         localStorage.setItem(STORAGE_PREFIX + 'admin_queue', JSON.stringify(adminQueue));
-        return request;
     }
 
     function isApproved(email) {
@@ -117,44 +116,35 @@ er: 1px solid #2d3a5e;
         return approved.includes(email);
     }
 
-    async function sendOtpToEmail(email, otp) {
+    async function sendOtp(email, otp) {
         const statusDiv = document.getElementById('regStatus');
-        const errorDiv = document.getElementById('regError');
-
-        if (!emailjsReady) {
-            errorDiv.innerText = '⚠️ EmailJS not ready. Using SIMULATED mode.';
-            console.log(`[SIMULATED] OTP for ${email}: ${otp}`);
-            statusDiv.innerText = `⚠️ SIMULATED: OTP is ${otp}`;
-            return false;
-        }
-
+        const otpDisplay = document.getElementById('otpDisplay');
+        
         try {
             const templateParams = { to_email: email, otp: otp };
             await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
-            statusDiv.innerText = '✅ OTP sent to your email. Check spam folder.';
-            errorDiv.innerText = '';
+            statusDiv.innerHTML = '✅ OTP sent to your email. Check spam folder.';
+            otpDisplay.innerHTML = '';
             return true;
         } catch (err) {
             console.error('EmailJS error:', err);
-            errorDiv.innerText = `❌ Email send failed. Using SIMULATED mode.`;
-            console.log(`[SIMULATED] OTP for ${email}: ${otp}`);
-            statusDiv.innerText = `⚠️ SIMULATED: OTP is ${otp}`;
+            statusDiv.innerHTML = '⚠️ Email sending failed. OTP shown below (simulated mode).';
+            otpDisplay.innerHTML = `📧 Your OTP: ${otp}`;
             return false;
         }
     }
 
-    // ========== EVENT HANDLERS ==========
     document.getElementById('sendOtpBtn').addEventListener('click', async () => {
         const email = document.getElementById('regEmail').value.trim();
         if (!email || !email.includes('@')) { alert('Enter valid email address'); return; }
         currentEmail = email;
         currentOtp = generateOtp();
-
-        document.getElementById('regStatus').innerText = 'Sending OTP...';
-        document.getElementById('regError').innerText = '';
-
-        await sendOtpToEmail(currentEmail, currentOtp);
-
+        
+        document.getElementById('regStatus').innerHTML = 'Sending...';
+        document.getElementById('otpDisplay').innerHTML = '';
+        
+        await sendOtp(currentEmail, currentOtp);
+        
         document.getElementById('regOtp').classList.remove('hidden');
         document.getElementById('verifyOtpBtn').classList.remove('hidden');
     });
@@ -165,7 +155,7 @@ er: 1px solid #2d3a5e;
         requestApproval(currentEmail);
         document.getElementById('registerDiv').classList.add('hidden');
         document.getElementById('pendingDiv').classList.remove('hidden');
-        document.getElementById('pendingStatus').innerText = 'Request sent to admin.';
+        document.getElementById('pendingStatus').innerHTML = 'Request sent to admin. Check admin panel.';
     });
 
     document.getElementById('checkApprovalBtn').addEventListener('click', () => {
@@ -177,9 +167,9 @@ er: 1px solid #2d3a5e;
             document.getElementById('balance').innerText = balance;
             document.getElementById('userEmailDisplay').innerText = currentEmail;
             document.getElementById('userIdDisplay').innerText = 'kongming_' + currentEmail.split('@')[0];
-            document.getElementById('walletStatus').innerText = '✅ Wallet active';
+            document.getElementById('walletStatus').innerHTML = '✅ Wallet active';
         } else {
-            document.getElementById('pendingStatus').innerText = 'Still pending admin approval.';
+            document.getElementById('pendingStatus').innerHTML = 'Still pending admin approval.';
         }
     });
 
@@ -216,12 +206,6 @@ er: 1px solid #2d3a5e;
         const id = document.getElementById('userIdDisplay').innerText;
         navigator.clipboard.writeText(id);
         alert('CSFS ID copied');
-    });
-
-    // Initialize
-    loadEmailJS().catch(err => {
-        console.error('EmailJS init failed:', err);
-        document.getElementById('regError').innerText = '⚠️ EmailJS not loaded. Using SIMULATED mode.';
     });
 </script>
 </body>
