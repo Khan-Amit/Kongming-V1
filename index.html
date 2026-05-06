@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Kongming Wallet · Unhackable</title>
+    <style>
+        body {
+            background: #0a0f1e;
+            font-family: system-ui;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .card {
+            max-width: 550px;
+            width: 100%;
+            background: #111827cc;
+            border-radius: 48px;
+            padding: 24px;
+            border: 1px solid #2d3a5e;
+        }
+        h1 { text-align: center; color: white; }
+        input, button {
+            width: 100%;
+            padding: 14px;
+            margin: 8px 0;
+            border-radius: 40px;
+            border: none;
+            font-size: 1rem;
+        }
+        input { background: #010a1a; border: 1px solid #2f4172; color: #ffdd99; }
+        button { background: #3b6ea0; color: white; font-weight: bold; cursor: pointer; }
+        .hidden { display: none; }
+        .status { color: #88aaff; text-align: center; margin-top: 12px; }
+        .footer { font-size: 0.65rem; text-align: center; color: #5b6b8e; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<!-- REGISTRATION SCREEN -->
+<div class="card" id="registerDiv">
+    <h1>🔐 Kongming Wallet</h1>
+    <input type="tel" id="regPhone" placeholder="Phone Number" value="">
+    <button id="sendOtpBtn">Send OTP</button>
+    <input type="text" id="regOtp" placeholder="Enter OTP" class="hidden">
+    <button id="verifyOtpBtn" class="hidden">Verify & Request Approval</button>
+    <div id="regStatus" class="status"></div>
+    <div class="footer">Device‑bound · Admin approved · CSFS secured</div>
+</div>
+
+<!-- PENDING APPROVAL SCREEN -->
+<div class="card hidden" id="pendingDiv">
+    <h1>⏳ Awaiting Approval</h1>
+    <p>Your request has been sent to the administrator.</p>
+    <p>You will be notified when approved.</p>
+    <button id="checkApprovalBtn">Check Status</button>
+    <div id="pendingStatus" class="status"></div>
+</div>
+
+<!-- MAIN WALLET (shown after admin approval) -->
+<div class="card hidden" id="walletDiv">
+    <h1>⚡ Kongming</h1>
+    <div style="text-align:center; margin:16px 0;">
+        <div style="font-size:2rem; color:#ffdd99;" id="balance">0.00</div>
+        <div>CSFS Coins</div>
+    </div>
+    <div class="tabs" style="display:flex; gap:8px;">
+        <button id="sendTabBtn" class="active" style="flex:1;">📤 Send</button>
+        <button id="receiveTabBtn" style="flex:1;">📥 Receive</button>
+    </div>
+    <div id="sendPane">
+        <input type="text" id="recipientPhone" placeholder="Recipient Phone Number">
+        <input type="number" id="amount" placeholder="Amount (CSFS)">
+        <button id="sendBtn">Send</button>
+    </div>
+    <div id="receivePane" class="hidden">
+        <div style="text-align:center; padding:16px;">
+            <div>Your Phone: <strong id="userPhoneDisplay"></strong></div>
+            <div>Your CSFS ID: <strong id="userIdDisplay"></strong></div>
+            <button id="copyIdBtn">📋 Copy ID</button>
+        </div>
+    </div>
+    <div id="walletStatus" class="status"></div>
+    <div class="footer">🔐 Device‑bound · CSFS secured · Admin approved</div>
+</div>
+
+<script>
+    // Storage keys
+    const STORAGE_PREFIX = 'kongming_';
+    let currentUser = null;
+
+    // Helper: generate random OTP (simulated)
+    function generateOtp() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+
+    // Request approval (stores pending request in localStorage + admin queue)
+    function requestApproval(phone, deviceId) {
+        const pendingKey = STORAGE_PREFIX + 'pending_' + phone;
+        const request = { phone, deviceId, timestamp: Date.now(), status: 'pending' };
+        localStorage.setItem(pendingKey, JSON.stringify(request));
+        // Also add to global admin queue (separate key)
+        const adminQueue = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'admin_queue') || '[]');
+        adminQueue.push(request);
+        localStorage.setItem(STORAGE_PREFIX + 'admin_queue', JSON.stringify(adminQueue));
+        return request;
+    }
+
+    // Check if user is approved
+    function isApproved(phone) {
+        const approved = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'approved_users') || '[]');
+        return approved.includes(phone);
+    }
+
+    // Register workflow
+    let currentOtp = null;
+    let currentPhone = null;
+
+    document.getElementById('sendOtpBtn').addEventListener('click', () => {
+        const phone = document.getElementById('regPhone').value.trim();
+        if (!phone || phone.length < 5) { alert('Enter valid phone number'); return; }
+        currentPhone = phone;
+        currentOtp = generateOtp();
+        alert(`OTP sent: ${currentOtp} (simulated)`);
+        document.getElementById('regOtp').classList.remove('hidden');
+        document.getElementById('verifyOtpBtn').classList.remove('hidden');
+        document.getElementById('regStatus').innerText = 'OTP sent. Enter code.';
+    });
+
+    document.getElementById('verifyOtpBtn').addEventListener('click', () => {
+        const enteredOtp = document.getElementById('regOtp').value.trim();
+        if (enteredOtp !== currentOtp) { alert('Invalid OTP'); return; }
+        // Generate device ID (simulated)
+        const deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36);
+        requestApproval(currentPhone, deviceId);
+        document.getElementById('registerDiv').classList.add('hidden');
+        document.getElementById('pendingDiv').classList.remove('hidden');
+        document.getElementById('pendingStatus').innerText = 'Request sent to admin.';
+    });
+
+    document.getElementById('checkApprovalBtn').addEventListener('click', () => {
+        if (!currentPhone) return;
+        if (isApproved(currentPhone)) {
+            document.getElementById('pendingDiv').classList.add('hidden');
+            document.getElementById('walletDiv').classList.remove('hidden');
+            // Load wallet data
+            const balance = localStorage.getItem(STORAGE_PREFIX + currentPhone + '_balance') || '100.00';
+            document.getElementById('balance').innerText = balance;
+            document.getElementById('userPhoneDisplay').innerText = currentPhone;
+            document.getElementById('userIdDisplay').innerText = 'kongming_' + currentPhone.substring(5);
+            document.getElementById('walletStatus').innerText = '✅ Wallet active';
+        } else {
+            document.getElementById('pendingStatus').innerText = 'Still pending admin approval.';
+        }
+    });
+
+    // Tabs
+    document.getElementById('sendTabBtn').addEventListener('click', () => {
+        document.getElementById('sendPane').classList.remove('hidden');
+        document.getElementById('receivePane').classList.add('hidden');
+        document.getElementById('sendTabBtn').classList.add('active');
+        document.getElementById('receiveTabBtn').classList.remove('active');
+    });
+    document.getElementById('receiveTabBtn').addEventListener('click', () => {
+        document.getElementById('sendPane').classList.add('hidden');
+        document.getElementById('receivePane').classList.remove('hidden');
+        document.getElementById('sendTabBtn').classList.remove('active');
+        document.getElementById('receiveTabBtn').classList.add('active');
+    });
+
+    // Send (simplified)
+    document.getElementById('sendBtn').addEventListener('click', () => {
+        const recipient = document.getElementById('recipientPhone').value.trim();
+        const amount = parseFloat(document.getElementById('amount').value);
+        if (!recipient || isNaN(amount)) { alert('Enter recipient and amount'); return; }
+        let balance = parseFloat(document.getElementById('balance').innerText);
+        if (amount > balance) { alert('Insufficient balance'); return; }
+        balance -= amount;
+        document.getElementById('balance').innerText = balance.toFixed(2);
+        localStorage.setItem(STORAGE_PREFIX + currentPhone + '_balance', balance.toFixed(2));
+        document.getElementById('walletStatus').innerText = `✅ Sent ${amount} CSFS to ${recipient}`;
+        setTimeout(() => document.getElementById('walletStatus').innerText = '', 3000);
+        document.getElementById('amount').value = '';
+    });
+
+    document.getElementById('copyIdBtn').addEventListener('click', () => {
+        const id = document.getElementById('userIdDisplay').innerText;
+        navigator.clipboard.writeText(id);
+        alert('CSFS ID copied');
+    });
+</script>
+</body>
+</html>
