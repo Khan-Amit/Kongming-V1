@@ -5,55 +5,266 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kongming Admin · Approve Users</title>
     <style>
-        body { background: #0a0f1e; font-family: system-ui; padding: 20px; color: white; }
-        .card { max-width: 800px; margin: auto; background: #111827cc; border-radius: 48px; padding: 24px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #2d3a5e; }
-        button { background: #3b6ea0; border: none; padding: 8px 16px; border-radius: 40px; color: white; cursor: pointer; }
-        .approved { color: #4caf50; }
-        .pending { color: #ffaa44; }
+        body {
+            background: #0a0f1e;
+            font-family: system-ui, -apple-system, 'Segoe UI', monospace;
+            padding: 20px;
+            margin: 0;
+            color: white;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #111827cc;
+            backdrop-filter: blur(4px);
+            border-radius: 48px;
+            padding: 24px;
+            border: 1px solid #2d3a5e;
+        }
+        h1 {
+            text-align: center;
+            margin: 0 0 8px;
+            font-size: 1.8rem;
+        }
+        .sub {
+            text-align: center;
+            color: #7e8cae;
+            font-size: 0.8rem;
+            margin-bottom: 24px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #2d3a5e;
+        }
+        th {
+            color: #aac9ff;
+            font-weight: normal;
+        }
+        button {
+            background: #3b6ea0;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 40px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #5b8ec0;
+            transform: scale(1.02);
+        }
+        .approved {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .pending {
+            color: #ffaa44;
+            font-weight: bold;
+        }
+        .status-msg {
+            background: #00000044;
+            border-radius: 28px;
+            padding: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #88aaff;
+        }
+        .footer {
+            text-align: center;
+            font-size: 0.7rem;
+            color: #5b6b8e;
+            margin-top: 24px;
+        }
+        .empty-row td {
+            text-align: center;
+            color: #6b8cae;
+            padding: 24px;
+        }
+        .refresh-btn {
+            background: #2d4a6e;
+            margin-bottom: 16px;
+            width: auto;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
-<div class="card">
-    <h1>🔐 Kongming Admin</h1>
-    <p>Approve or deny new wallet requests.</p>
-    <div id="adminStatus"></div>
-    <table id="requestTable">
-        <thead><tr><th>Phone</th><th>Device ID</th><th>Timestamp</th><th>Action</th></tr></thead>
-        <tbody></tbody>
-    </table>
+<div class="container">
+    <div class="card">
+        <h1>🔐 Kongming Admin</h1>
+        <div class="sub">Approve or deny new wallet requests · Email‑based</div>
+
+        <div style="text-align: center;">
+            <button id="refreshBtn" class="refresh-btn">🔄 Refresh</button>
+        </div>
+
+        <div id="adminStatus" class="status-msg"></div>
+
+        <div style="overflow-x: auto;">
+            <table id="requestTable">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Timestamp</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="requestsBody">
+                    <tr class="empty-row"><td colspan="4">Loading requests...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            🔐 Only you have access to this page<br>
+            Approved users can immediately use Kongming Wallet
+        </div>
+    </div>
 </div>
+
 <script>
     const STORAGE_PREFIX = 'kongming_';
-    function loadRequests() {
-        const queue = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'admin_queue') || '[]');
-        const tbody = document.querySelector('#requestTable tbody');
-        tbody.innerHTML = '';
+
+    // Helper: get admin queue
+    function getAdminQueue() {
+        const queue = localStorage.getItem(STORAGE_PREFIX + 'admin_queue');
+        return queue ? JSON.parse(queue) : [];
+    }
+
+    // Helper: save admin queue
+    function saveAdminQueue(queue) {
+        localStorage.setItem(STORAGE_PREFIX + 'admin_queue', JSON.stringify(queue));
+    }
+
+    // Helper: get approved users
+    function getApprovedUsers() {
+        const approved = localStorage.getItem(STORAGE_PREFIX + 'approved_users');
+        return approved ? JSON.parse(approved) : [];
+    }
+
+    // Helper: save approved users
+    function saveApprovedUsers(users) {
+        localStorage.setItem(STORAGE_PREFIX + 'approved_users', JSON.stringify(users));
+    }
+
+    // Approve user
+    function approveUser(email) {
+        // Add to approved list
+        let approved = getApprovedUsers();
+        if (!approved.includes(email)) {
+            approved.push(email);
+            saveApprovedUsers(approved);
+        }
+
+        // Remove from queue
+        let queue = getAdminQueue();
+        queue = queue.filter(req => req.email !== email);
+        saveAdminQueue(queue);
+
+        // Also remove pending specific entry
+        localStorage.removeItem(STORAGE_PREFIX + 'pending_' + email);
+
+        return true;
+    }
+
+    // Deny / delete request
+    function denyUser(email) {
+        let queue = getAdminQueue();
+        queue = queue.filter(req => req.email !== email);
+        saveAdminQueue(queue);
+        localStorage.removeItem(STORAGE_PREFIX + 'pending_' + email);
+    }
+
+    // Render the table
+    function renderRequests() {
+        const queue = getAdminQueue();
+        const tbody = document.getElementById('requestsBody');
+        const adminStatus = document.getElementById('adminStatus');
+
+        if (!queue.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="4">✨ No pending requests</td></tr>';
+            adminStatus.innerHTML = '📭 All caught up. Check back later.';
+            return;
+        }
+
+        adminStatus.innerHTML = `📋 ${queue.length} pending request(s) waiting for approval.`;
+
+        let html = '';
         queue.forEach(req => {
-            const row = tbody.insertRow();
-            row.insertCell(0).innerText = req.phone;
-            row.insertCell(1).innerText = req.deviceId.substring(0, 20) + '…';
-            row.insertCell(2).innerText = new Date(req.timestamp).toLocaleString();
-            const actionCell = row.insertCell(3);
-            const approveBtn = document.createElement('button');
-            approveBtn.innerText = 'Approve';
-            approveBtn.style.background = '#4caf50';
-            approveBtn.onclick = () => {
-                let approved = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'approved_users') || '[]');
-                if (!approved.includes(req.phone)) approved.push(req.phone);
-                localStorage.setItem(STORAGE_PREFIX + 'approved_users', JSON.stringify(approved));
-                // Remove from queue
-                const newQueue = queue.filter(r => r.phone !== req.phone);
-                localStorage.setItem(STORAGE_PREFIX + 'admin_queue', JSON.stringify(newQueue));
-                loadRequests();
-                document.getElementById('adminStatus').innerHTML = `✅ Approved ${req.phone}`;
-                setTimeout(() => document.getElementById('adminStatus').innerHTML = '', 3000);
-            };
-            actionCell.appendChild(approveBtn);
+            const date = new Date(req.timestamp);
+            const dateStr = date.toLocaleString();
+            html += `
+                <tr>
+                    <td style="font-family: monospace;">${escapeHtml(req.email)}</td>
+                    <td>${dateStr}</td>
+                    <td><span class="pending">Pending</span></td>
+                    <td>
+                        <button class="approve-btn" data-email="${escapeHtml(req.email)}" style="background:#4caf50; margin-right:8px;">✅ Approve</button>
+                        <button class="deny-btn" data-email="${escapeHtml(req.email)}" style="background:#6b8cae;">❌ Deny</button>
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+
+        // Attach event listeners to new buttons
+        document.querySelectorAll('.approve-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const email = btn.getAttribute('data-email');
+                approveUser(email);
+                renderRequests();
+                showTemporaryMessage(`✅ Approved ${email}`);
+            });
+        });
+
+        document.querySelectorAll('.deny-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const email = btn.getAttribute('data-email');
+                denyUser(email);
+                renderRequests();
+                showTemporaryMessage(`❌ Denied ${email}`);
+            });
         });
     }
-    loadRequests();
+
+    function showTemporaryMessage(msg) {
+        const statusDiv = document.getElementById('adminStatus');
+        const originalHtml = statusDiv.innerHTML;
+        statusDiv.innerHTML = msg;
+        setTimeout(() => {
+            if (document.getElementById('adminStatus')) {
+                renderRequests();
+            }
+        }, 1500);
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
+    // Refresh button
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+        renderRequests();
+    });
+
+    // Initial render
+    renderRequests();
 </script>
 </body>
 </html>
